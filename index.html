@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="th">
+    <head>
+        <meta charset="UTF-8" />
+        <title>วงล้อสุ่มรายชื่อ</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <!-- SheetJS -->
+        <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+        <style>
+            body {
+                font-family: sans-serif;
+                text-align: center;
+                margin: 30px;
+            }
+
+            canvas {
+                max-width: 90vw;
+                height: auto;
+            }
+
+            @media (max-width: 1024px) {
+                .container {
+                    flex-direction: column;
+                    align-items: center;
+                }
+
+                .list-section {
+                    width: 100%;
+                    max-width: 420px;
+                }
+            }
+
+            button {
+                margin: 10px;
+                padding: 10px 18px;
+                font-size: 16px;
+                cursor: pointer;
+                border-radius: 8px;
+                border: 1px solid #ccc;
+                background: #f5f5f5;
+                transition: all 0.2s ease;
+                touch-action: manipulation;
+            }
+
+            button:hover {
+                background-color: #4caf50;
+                color: white;
+                border-color: #4caf50;
+                transform: translateY(-2px);
+            }
+
+            button:active {
+                background-color: #4caf50;
+                color: white;
+                border-color: #4caf50;
+            }
+
+            .container {
+                display: flex;
+                justify-content: center;
+                align-items: flex-start;
+                gap: 40px;
+                margin-top: 20px;
+            }
+
+            .wheel-section {
+                text-align: center;
+            }
+
+            .controls {
+                margin-top: 10px;
+            }
+
+            .list-section {
+                width: 260px;
+                max-height: 420px;
+                overflow-y: auto;
+                text-align: left;
+                border: 1px solid #ddd;
+                border-radius: 10px;
+                padding: 12px;
+                background: #fafafa;
+            }
+
+            #nameList {
+                line-height: 1.6;
+                font-size: 15px;
+            }
+
+            #nameList {
+                max-width: 300px;
+                margin: 10px auto;
+                text-align: left;
+                font-size: 14px;
+            }
+        </style>
+    </head>
+    <body>
+        <div>
+            <div class="container">
+                <div class="wheel-section">
+                    <h1>🎡 วงล้อสุ่มรายชื่อ</h1>
+
+                    <canvas id="wheel" width="400" height="400"></canvas>
+
+                    <div class="controls">
+                        <button onclick="spin()">หมุนวงล้อ</button>
+                        <button onclick="resetAll()">รีเซ็ต</button>
+                        <button onclick="loadExcelFromFile()">🔄 รีโหลดรายชื่อ</button>
+                    </div>
+
+                    <h2 id="result"></h2>
+                </div>
+
+                <div>
+                    <h3>📋 รายชื่อทั้งหมด</h3>
+                    <div class="list-section">
+                        <div id="nameList"></div>
+                    </div>
+
+                    <hr />
+
+                    <h3>✅ รายชื่อที่ถูกสุ่มแล้ว</h3>
+                    <div id="pickedList"></div>
+                </div>
+            </div>
+
+            <h3 id="result"></h3>
+        </div>
+
+        <script>
+            const canvas = document.getElementById("wheel");
+            const ctx = canvas.getContext("2d");
+
+            let names = [];
+            let angle = 0;
+            let spinning = false;
+            let pickedNames = [];
+
+            // โหลด Excel อัตโนมัติ
+            window.onload = loadExcelFromFile;
+
+            function showAllNames() {
+                document.getElementById("nameList").innerHTML = names.length === 0 ? "<i>— ไม่มีรายชื่อ —</i>" : names.map((n, i) => `${i + 1}. ${n}`).join("<br>");
+            }
+
+            function showPickedNames() {
+                document.getElementById("pickedList").innerHTML = pickedNames.length === 0 ? "<i>— ยังไม่มี —</i>" : pickedNames.map((n, i) => `${i + 1}. ${n}`).join("<br>");
+            }
+
+            function loadExcelFromFile() {
+                fetch("listName.xlsx?t=" + Date.now()) // กัน cache
+                    .then((res) => res.arrayBuffer())
+                    .then((data) => {
+                        const workbook = XLSX.read(data, { type: "array" });
+                        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+                        names = json
+                            .slice(1)
+                            .map((row) => row[0])
+                            .filter(Boolean)
+                            .sort();
+
+                        angle = 0;
+                        drawWheel();
+                        showAllNames();
+                    })
+                    .catch((err) => {
+                        console.error(err);
+                        alert("❌ โหลดไฟล์ Excel ไม่ได้");
+                    });
+            }
+
+            function showAllNames() {
+                document.getElementById("nameList").innerHTML = names.join("<br>");
+            }
+
+            function drawWheel() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                if (names.length === 0) return;
+
+                const cx = 200,
+                    cy = 200;
+                const radius = 180;
+                const slice = (2 * Math.PI) / names.length;
+
+                names.forEach((name, i) => {
+                    const start = angle + i * slice;
+                    const end = start + slice;
+
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.arc(cx, cy, radius, start, end);
+                    ctx.fillStyle = `hsl(${(i * 360) / names.length}, 70%, 60%)`;
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.save();
+                    ctx.translate(cx, cy);
+                    ctx.rotate(start + slice / 2);
+                    ctx.textAlign = "right";
+                    ctx.font = "14px sans-serif";
+                    ctx.fillStyle = "#000";
+                    ctx.fillText(name, radius - 10, 5);
+                    ctx.restore();
+                });
+
+                // ลูกศร
+                ctx.fillStyle = "green";
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - radius + 10); // ปลายแหลมลง
+                ctx.lineTo(cx - 10, cy - radius - 10);
+                ctx.lineTo(cx + 10, cy - radius - 10);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            function spin() {
+                if (spinning || names.length === 0) return;
+                spinning = true;
+
+                const spinAngle = Math.random() * 2000 + 2000;
+                const startAngle = angle;
+                const startTime = performance.now();
+                const duration = 3000;
+
+                function animate(time) {
+                    const progress = Math.min((time - startTime) / duration, 1);
+                    const easeOut = 1 - Math.pow(1 - progress, 3);
+                    angle = startAngle + (spinAngle * easeOut * Math.PI) / 180;
+                    drawWheel();
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        finishSpin();
+                    }
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            function finishSpin() {
+                const slice = (2 * Math.PI) / names.length;
+                const currentAngle = angle % (2 * Math.PI);
+
+                let pointerAngle = ((3 * Math.PI) / 2 - currentAngle) % (2 * Math.PI);
+                if (pointerAngle < 0) pointerAngle += 2 * Math.PI;
+
+                const index = Math.floor(pointerAngle / slice);
+                const winner = names[index];
+
+                alert("🎉 ผู้ที่ถูกสุ่มคือ: " + winner);
+                document.getElementById("result").innerText = "🎉 ผู้ที่ถูกสุ่มคือ: " + winner;
+
+                // 👉 ย้ายชื่อ
+                pickedNames.push(winner);
+                names.splice(index, 1);
+
+                angle = 0;
+                drawWheel();
+                showAllNames();
+                showPickedNames();
+
+                spinning = false;
+            }
+
+            function resetAll() {
+                names = [];
+                pickedNames = [];
+                angle = 0;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                document.getElementById("result").innerText = "";
+                document.getElementById("nameList").innerHTML = "";
+                document.getElementById("pickedList").innerHTML = "";
+            }
+        </script>
+    </body>
+</html>
